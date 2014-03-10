@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+  <head>
+   <link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.7.1/leaflet.css" />
+   <script src="js/leaflet-src.js"></script>
+
+   <script src="https://maps.googleapis.com/maps/api/js?v=3.exp&sensor=false&libraries=places"></script>
+   <script src="http://matchingnotes.com/javascripts/leaflet-google.js"></script>
+   <script src="http://code.jquery.com/jquery-1.8.3.min.js"></script>
+   <script src="http://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.5.2/underscore-min.js"></script>
+
+   <script src="js/leaflet-google-autocomplete.js"></script>
+   <link rel="stylesheet" href="css/leaflet-google-autocomplete.css" />
+   <link rel="stylesheet" href="css/leaflet.label.css" />
+   <script src="js/leaflet.utfgrid.js"></script>
+   <script src="js/leaflet.label.js"></script>
+
+    <script src="js/TileLayer.GeoJSON.js"></script>
+
+   <title>TileStache Preview: ex2</title>
+   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0;">
+   <style>
+    body {padding: 0; margin: 0; height: 100%; width: 100%;}
+    #map { position: absolute; top: 0; left: 0; height: 100%; width: 100%;}
+   </style>
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <script>
+    /**
+     * get url paramaters
+     */
+    function getURLParameter(name) {
+        return decodeURI(
+            (RegExp(name + '=' + '(.+?)(&|$)').exec(location.search)||[,])[1]
+        );
+    }
+
+    function grid(x) { return x; }
+
+    var regionParameter = getURLParameter('region');
+    var region = (regionParameter === 'undefined') ? '' : regionParameter;
+
+CM_ATTR = 'Map data &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors, ' +
+        '<a href="http://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, ' +
+                'Imagery © <a href="http://cloudmade.com">CloudMade</a>';
+
+CM_URL = 'http://{s}.tile.cloudmade.com/d4fc77ea4a63471cab2423e66626cbb6/{styleId}/256/{z}/{x}/{y}.png';
+var minimal = L.tileLayer(CM_URL, {styleId: 22677, attribution: CM_ATTR})
+
+
+var map = new L.Map('map', {
+  center: [40.74, -74],
+  zoom: 12
+});
+
+minimal.addTo(map);
+
+new L.Control.GoogleAutocomplete().addTo(map);
+
+ var style = {
+        "clickable": true,
+        "color": "#00D",
+        "fillColor": "#00D",
+        "weight": 1.0,
+        "opacity": 0.3,
+        "fillOpacity": 0.2
+    };
+    var hoverStyle = {
+        "fillOpacity": 0.5
+    };
+    var host = 'http://localhost:8080';
+    var layers = ['zcta'];
+    var nameKey = 'name';
+
+    function getTileLayerUrl(s) {
+      return host + '/' + s + '/{z}/{x}/{y}.png';
+    }
+
+    function getJsonLayerUrl(s) {
+      return host + '/' + s + '-geojson/{z}/{x}/{y}.json';
+    }
+
+    function makeGeoJsonLayer(geojsonURL) {
+      return new L.TileLayer.GeoJSON(geojsonURL, {
+            clipTiles: true,
+            unique: function (feature) {
+                return feature.id;
+            }
+        }, {
+            style: style,
+            onEachFeature: function (feature, layer) {
+                layer.bindLabel(feature.properties[nameKey], { noHide: true })
+                if (feature.properties) {
+                    var popupString = '<div class="popup">';
+                    for (var k in feature.properties) {
+                        var v = feature.properties[k];
+                        popupString += k + ': ' + v + '<br />';
+                    }
+                    popupString += '</div>';
+                  layer.bindPopup(popupString)
+                }
+                if (!(layer instanceof L.Point)) {
+                    layer.on('mouseover', function () {
+                        layer.setStyle(hoverStyle);
+                    });
+                    layer.on('mouseout', function () {
+                        layer.setStyle(style);
+                    });
+                }
+            }
+        }
+    );
+  }
+
+  var geoJsonLayerMap = {}
+  function makeGeoJsonLayerControl() {
+    _.each(layers, function(layerName) {
+      geoJsonLayerMap[layerName] = makeGeoJsonLayer(getJsonLayerUrl(layerName));
+    });
+
+    return L.control.layers(
+      null,
+      geoJsonLayerMap,
+      {collapsed: false}
+    );
+  }
+
+  var tileLayerMap = {}
+  function makeTileLayerControl() {
+    _.each(layers, function(layerName) {
+      tileLayerMap[layerName] = L.tileLayer(getTileLayerUrl(layerName));
+    });
+    
+    return L.control.layers(
+      null,
+      tileLayerMap,
+      {collapsed: false}
+    );
+  }
+
+  var geoJsonLayerControl = makeGeoJsonLayerControl();
+  var tileLayerControl = makeTileLayerControl();
+  var currentLayerMap = {'hoods': {}};
+
+  function swapLayers(newControls, newLayerMap) {
+    if (!!currentControl) {
+      currentControl.removeFrom(map);
+    }
+    var currentLayers = _.chain(currentLayerMap)
+      .pairs()
+      .filter(function(pair) {
+        return map.hasLayer(pair[1]);
+      })
+      .map(function(pair) { return pair[0]; })
+      .value();
+
+    _.each(currentLayerMap, function(layer) {
+      if (map.hasLayer(layer)) {
+        map.removeLayer(layer);
+      }
+    })
+    _.each(currentLayers, function(layerName) {
+      map.addLayer(newLayerMap[layerName]);
+    })
+    map.addControl(newControls);
+    currentControl = newControls;
+    currentLayerMap = newLayerMap;
+  }
+
+  var currentControl = null;
+  function swapLayerControls() {
+    console.log(map.getZoom())
+    if (map.getZoom() >= 10 && (currentControl != geoJsonLayerControl)) {
+      console.log('swapping to geojson');
+      swapLayers(geoJsonLayerControl, geoJsonLayerMap)
+    } else if (map.getZoom() < 10 && currentControl != tileLayerControl) {
+      console.log('swapping to tile');
+      swapLayers(tileLayerControl, tileLayerMap)
+    }
+  }
+
+  map.on('zoomend', swapLayerControls);
+  currentLayerMap = geoJsonLayerMap;
+  if (!map.hasLayer(currentLayerMap['hoods'])) {
+    map.addLayer(currentLayerMap['hoods']);
+  }
+  swapLayerControls();
+
+
+  </script>
+</body>
+</html>
