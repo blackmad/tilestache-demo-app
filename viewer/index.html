@@ -70,8 +70,8 @@ new L.Control.GoogleAutocomplete().addTo(map);
     var hoverStyle = {
         "fillOpacity": 0.5
     };
-    var host = 'http://localhost:8080';
-    var layers = ['zcta'];
+    var host = 'http://tilestache.blackmad.com/data';
+    var layers = ['county', 'zcta'];
     var nameKey = 'name';
 
     function getTileLayerUrl(s) {
@@ -79,6 +79,7 @@ new L.Control.GoogleAutocomplete().addTo(map);
     }
 
     function getJsonLayerUrl(s) {
+      console.log(host + '/' + s + '-geojson/{z}/{x}/{y}.json');
       return host + '/' + s + '-geojson/{z}/{x}/{y}.json';
     }
 
@@ -142,7 +143,8 @@ new L.Control.GoogleAutocomplete().addTo(map);
 
   var geoJsonLayerControl = makeGeoJsonLayerControl();
   var tileLayerControl = makeTileLayerControl();
-  var currentLayerMap = {'hoods': {}};
+  var defaultOnLayer = 'county';
+  var currentLayerMap = {};
 
   function swapLayers(newControls, newLayerMap) {
     if (!!currentControl) {
@@ -183,8 +185,8 @@ new L.Control.GoogleAutocomplete().addTo(map);
 
   map.on('zoomend', swapLayerControls);
   currentLayerMap = geoJsonLayerMap;
-  if (!map.hasLayer(currentLayerMap['hoods'])) {
-    map.addLayer(currentLayerMap['hoods']);
+  if (!map.hasLayer(currentLayerMap[defaultOnLayer])) {
+    map.addLayer(currentLayerMap[defaultOnLayer]);
   }
   swapLayerControls();
 
